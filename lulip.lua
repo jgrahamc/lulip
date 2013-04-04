@@ -44,25 +44,25 @@ local mt = { __index = _M }
 function new(self)
    return setmetatable({
  
-	  -- Time when start() and stop() were called in microseconds
+      -- Time when start() and stop() were called in microseconds
 
       start_time = 0,
-	  stop_time = 0,
+      stop_time = 0,
 
-	  -- Per line timing information
+      -- Per line timing information
 
       lines = {},
 
-	  -- The current line being processed and when it was startd
+      -- The current line being processed and when it was startd
 
-	  current_line = nil,
-	  current_start = 0,
+      current_line = nil,
+      current_start = 0,
 
-	  -- List of files to ignore. Set patterns using dont()
+      -- List of files to ignore. Set patterns using dont()
 
-	  ignore = {},
+      ignore = {},
 
-	  -- List of short file names used as a cache
+      -- List of short file names used as a cache
 
       short = {},
 
@@ -78,29 +78,29 @@ function event(self, event, line)
 
    local f = string_sub(debug.getinfo(3).source,2)
    for i=1,#self.ignore do
-	  if string_find(f, self.ignore[i], 1, true) then
-		 return
-	  end
+      if string_find(f, self.ignore[i], 1, true) then
+         return
+      end
    end
 
    local short = self.short[f]
    if not short then
-	  local start = string_find(f, "[^/]+$")
-	  self.short[f] = string_sub(f, start)
-	  short = self.short[f]
+      local start = string_find(f, "[^/]+$")
+      self.short[f] = string_sub(f, start)
+      short = self.short[f]
    end
 
    if self.current_line ~= nil then
-	  self.lines[self.current_line][1] =
-		 self.lines[self.current_line][1] + 1
-	  self.lines[self.current_line][2] =
-		 self.lines[self.current_line][2] + (now - self.current_start)
+      self.lines[self.current_line][1] =
+         self.lines[self.current_line][1] + 1
+      self.lines[self.current_line][2] =
+         self.lines[self.current_line][2] + (now - self.current_start)
    end
 
    self.current_line = short .. ':' .. line
 
    if self.lines[self.current_line] == nil then
-	  self.lines[self.current_line] = {0, 0.0, f}
+      self.lines[self.current_line] = {0, 0.0, f}
    end
    
    self.current_start = gettimeofday()
@@ -136,8 +136,8 @@ local function readfile(file)
    local lines = {}
    local ln = 1
    for line in io_lines(file) do
-	  lines[ln] = string_gsub(line, "^%s*(.-)%s*$", "%1")
-	  ln = ln + 1
+      lines[ln] = string_gsub(line, "^%s*(.-)%s*$", "%1")
+      ln = ln + 1
    end
    return lines
 end
@@ -146,7 +146,7 @@ end
 function dump(self, file)
    local t = {}
    for l,d in pairs(self.lines) do
-	  table_insert(t, {line=l, data=d})
+      table_insert(t, {line=l, data=d})
    end
    table_sort(t, function(a,b) return a["data"][2] > b["data"][2] end)
 
@@ -154,8 +154,8 @@ function dump(self, file)
 
    local f = io_open(file, "w")
    if not f then
-	  print("Failed to open output file " .. file)
-	  return
+      print("Failed to open output file " .. file)
+      return
    end
    f:write([[
 <html>
@@ -173,14 +173,14 @@ function dump(self, file)
 ]])
 
    for j=1,self.rows do
-	  if not t[j] then break end
-	  local l = t[j]["line"]
-	  local d = t[j]["data"]
-	  if not files[d[3]] then 
-		 files[d[3]] = readfile(d[3])
-	  end
-	  local ln = tonumber(string_sub(l, string_find(l, ":", 1, true)+1))
-	  f:write(string_format([[
+      if not t[j] then break end
+      local l = t[j]["line"]
+      local d = t[j]["data"]
+      if not files[d[3]] then 
+         files[d[3]] = readfile(d[3])
+      end
+      local ln = tonumber(string_sub(l, string_find(l, ":", 1, true)+1))
+      f:write(string_format([[
 <tr><td>%s</td><td align="right">%i</td><td align="right">%.3f</td>
 <td class="code"><code class="prettyprint">%s</code></td></tr>]],
 l, d[1], d[2]/1000, files[d[3]][ln]))
