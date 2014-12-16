@@ -10,9 +10,14 @@ local pairs = pairs
 local print = print
 local debug = debug
 local tonumber = tonumber
+local tostring = tostring
 local setmetatable = setmetatable
+local loadfile = loadfile
+local type = type
+local error = error
 local table_sort = table.sort
 local table_insert = table.insert
+local table_concat = table.concat
 local string_find = string.find
 local string_sub = string.sub
 local string_gsub = string.gsub
@@ -43,6 +48,10 @@ local mt = { __index = _M }
 -- new: create new profiler object
 function new(self)
    return setmetatable({
+
+      -- File where profiling data of different sessions will be accumulated in.
+      -- If this is not set - profiling data is not accumulated.
+      accumulate_file = nil,
  
       -- Time when start() and stop() were called in microseconds
 
@@ -142,10 +151,95 @@ local function readfile(file)
    return lines
 end
 
+---Sets file where profile data between different sessions is accumulated in.
+-- To reset profile data - just delete this file.
+function accumulate_in(self, accumulate_file)
+   self.accumulate_file = accumulate_file
+end
+
+local function serialize_table(o)
+   if type(o) == "number" then
+      return tostring(o)
+   elseif type(o) == "string" then
+      local fmt = "%q"
+      return fmt:format(o)
+   elseif type(o) == "table" then
+      local res = {}
+      table_insert(res, "{\n")
+      for k,v in pairs(o) do
+         table_insert(res, "  [")
+
+         table_insert(res, serialize_table(k))
+         table_insert(res, "] = ")
+
+         table_insert(res, serialize_table(v))
+         table_insert(res, ",\n")
+      end
+      table_insert(res, "}\n")
+      return table_concat(res, '')
+   else
+      error("cannot serialize a " .. type(o))
+   end
+   return nil
+end
+
+local function file_exists(name)
+   local f = io_open(name, "r")
+   if f~=nil then f:close() return true else return false end
+end
+
+local function get_accum_lines_from_file(fname)
+   if not file_exists(fname) then
+      return {}
+   end
+   local fn = loadfile(fname)
+   return fn()
+end
+
+local function write_accum_lines_to_file(fname, t)
+   local t_ser = serialize_table(t)
+   if t_ser == nil then
+      return
+   end
+
+   local f = io_open(fname, "w")
+   if not f then
+      print("Failed to open acummulation file for writing:  " .. fname)
+   end
+
+   f:write("return " .. t_ser)
+   f:close()
+end
+
+---Accumulates profiling data of this session together with previous sessions and returns final (accumulated) data
+local function accumulate_lines(self)
+   local fname = self.accumulate_file
+   if fname == nil then
+      return self.lines
+   end
+
+   local accum_lines = get_accum_lines_from_file(fname)
+   if accum_lines == nil then
+      accum_lines = {}
+   end
+   for l,d in pairs(self.lines) do
+      if accum_lines[l] ~= nil then
+         accum_lines[l][1] = accum_lines[l][1] + d[1] -- Accumulate "count"
+         accum_lines[l][2] = accum_lines[l][2] + d[2] -- Accumulate "elapsed"
+      else
+         accum_lines[l] = d
+      end
+   end
+   write_accum_lines_to_file(fname, accum_lines)
+
+   return accum_lines
+end
+
 -- dump: dump profile information to the named file
 function dump(self, file)
+   local lines = accumulate_lines(self)
    local t = {}
-   for l,d in pairs(self.lines) do
+   for l,d in pairs(lines) do
       table_insert(t, {line=l, data=d})
    end
    table_sort(t, function(a,b) return a["data"][2] > b["data"][2] end)
@@ -166,8 +260,12 @@ function dump(self, file)
 </head>
 <body>
 <table width="100%">
-<thead><tr><th align="left">file:line</th><th align="right">count</th>
-<th align="right">elapsed (ms)</th><th align="left" class="code">line</th>
+<thead><tr>
+<th align="left">file:line</th>
+<th align="right">count</th>
+<th align="right">elapsed (ms)</th>
+<th align="right">call avg elapsed (ms)</th>
+<th align="left" class="code">line</th>
 </tr></thead>
 <tbody>
 ]])
@@ -182,8 +280,9 @@ function dump(self, file)
       local ln = tonumber(string_sub(l, string_find(l, ":", 1, true)+1))
       f:write(string_format([[
 <tr><td>%s</td><td align="right">%i</td><td align="right">%.3f</td>
+<td align="right">%.3f</td>
 <td class="code"><code class="prettyprint">%s</code></td></tr>]],
-l, d[1], d[2]/1000, files[d[3]][ln]))
+l, d[1], d[2]/1000, (d[2]/1000)/d[1], files[d[3]][ln]))
    end
    f:write('</tbody></table></body></html')
    f:close()
