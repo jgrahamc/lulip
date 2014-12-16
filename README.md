@@ -16,5 +16,6 @@ p:start()
 -- execute code here
 
 p:stop()
+p:accumulate_in(accumulate_file_name)
 p:dump(output_file_name)
 ```
